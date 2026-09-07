@@ -1,0 +1,518 @@
+{
+  "info": {
+    "name": "Movieticket API",
+    "_postman_id": "b6a1a1c0-1f2a-4a3a-9d3e-movieticket001",
+    "description": "All REST endpoints for the Movie Ticket Booking System (Modules 1-7). Base URL defaults to http://localhost:8080 (no context-path configured). Auth uses JWT bearer tokens - run Auth > Login first; its test script auto-saves {{accessToken}} / {{refreshToken}} for every other request in this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "adminRefreshToken", "value": "" },
+    { "key": "movieId", "value": "1" },
+    { "key": "showId", "value": "1" },
+    { "key": "seatId", "value": "1" },
+    { "key": "bookingId", "value": "1" },
+    { "key": "providerOrderId", "value": "" },
+    { "key": "ticketCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"johndoe\",\n  \"email\": \"johndoe@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "description": "Public. Creates a ROLE_USER account. Returns 201 with no body."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"johndoe\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Public. Exchanges credentials for an access + refresh token pair. Saves both to collection variables on success."
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('adminAccessToken', body.accessToken);",
+                  "    pm.collectionVariables.set('adminRefreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"adminpassword\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Log in as a ROLE_ADMIN user (created however your seeding/registration process assigns ROLE_ADMIN). Saves tokens as adminAccessToken/adminRefreshToken for use in the Admin folders."
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Public (the refresh token is the credential). Rotates the refresh token; returns a new access+refresh pair."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "description": "Requires a valid access token. Revokes the given refresh token. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Movies",
+      "item": [
+        {
+          "name": "Create Movie (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Inception\",\n  \"description\": \"A thief who steals corporate secrets through dream-sharing technology.\",\n  \"durationMinutes\": 148\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/movies", "host": ["{{baseUrl}}"], "path": ["admin", "movies"] },
+            "description": "Admin only (ROLE_ADMIN). Creates a movie."
+          }
+        },
+        {
+          "name": "Update Movie (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Inception\",\n  \"description\": \"Updated description.\",\n  \"durationMinutes\": 150\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/movies/{{movieId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "movies", "{{movieId}}"]
+            },
+            "description": "Admin only. Full replace of title/description/durationMinutes."
+          }
+        },
+        {
+          "name": "List / Search Movies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/movies?search=&page=0&size=20&sort=title,asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["movies"],
+              "query": [
+                { "key": "search", "value": "", "description": "Optional title search" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "title,asc" }
+              ]
+            },
+            "description": "Public, paginated list/search of movies."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shows",
+      "item": [
+        {
+          "name": "Create Show (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"2026-12-25T18:30:00\",\n  \"screenName\": \"Screen 1\",\n  \"price\": 250.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/movies/{{movieId}}/shows",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "movies", "{{movieId}}", "shows"]
+            },
+            "description": "Admin only. Schedules a show for a movie. startTime must be in the future."
+          }
+        },
+        {
+          "name": "List Shows For Movie",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/movies/{{movieId}}/shows?includePast=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["movies", "{{movieId}}", "shows"],
+              "query": [{ "key": "includePast", "value": "false" }]
+            },
+            "description": "Public. Defaults to future shows only; pass includePast=true for the full schedule."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seats",
+      "item": [
+        {
+          "name": "Generate Seat Layout (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": 5,\n  \"seatsPerRow\": 10,\n  \"rowLabels\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/shows/{{showId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "shows", "{{showId}}", "seats"]
+            },
+            "description": "Admin only. One-time per show - calling twice returns 409. rowLabels is optional (omit for auto A,B,C...)."
+          }
+        },
+        {
+          "name": "Get Live Seat Layout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/shows/{{showId}}/seats",
+              "host": ["{{baseUrl}}"],
+              "path": ["shows", "{{showId}}", "seats"]
+            },
+            "description": "Public. Effective status per seat: BOOKED > LOCKED (Redis) > DB status."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seat Locking",
+      "item": [
+        {
+          "name": "Lock Seats",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seatIds\": [{{seatId}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shows/{{showId}}/seats/lock",
+              "host": ["{{baseUrl}}"],
+              "path": ["shows", "{{showId}}", "seats", "lock"]
+            },
+            "description": "Any logged-in user. All-or-nothing hold on 1-10 seats, TTL 300s."
+          }
+        },
+        {
+          "name": "Release Seats",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seatIds\": [{{seatId}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/shows/{{showId}}/seats/lock",
+              "host": ["{{baseUrl}}"],
+              "path": ["shows", "{{showId}}", "seats", "lock"]
+            },
+            "description": "Any logged-in user. Releases seats the caller holds; idempotent, always 200."
+          }
+        },
+        {
+          "name": "My Locked Seats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/shows/{{showId}}/seats/locks/mine",
+              "host": ["{{baseUrl}}"],
+              "path": ["shows", "{{showId}}", "seats", "locks", "mine"]
+            },
+            "description": "Any logged-in user. Which seats of this show the caller currently holds, and for how much longer."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Create Booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('bookingId', body.id);",
+                  "    if (body.providerOrderId) { pm.collectionVariables.set('providerOrderId', body.providerOrderId); }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"showId\": {{showId}},\n  \"seatIds\": [{{seatId}}]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] },
+            "description": "Any logged-in user. Requires the caller already holds the seats (see Lock Seats). Creates a PENDING booking + payment intent for 1-10 seats. Returns 201 with a checkoutUrl to pay at."
+          }
+        },
+        {
+          "name": "Confirm Booking Payment (Browser Callback)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"providerPaymentId\": \"pay_XXXXXXXXXXXX\",\n  \"signature\": \"generated_signature_here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}", "confirm"]
+            },
+            "description": "Owner only. Confirms payment via the browser redirect callback. In mock mode, prefer 'Mock Gateway > Simulate Successful Payment' instead of hand-crafting a signature here."
+          }
+        },
+        {
+          "name": "Get Booking",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}"]
+            },
+            "description": "Owner only; 404 for someone else's booking. Gets one booking with its seats and payment status."
+          }
+        },
+        {
+          "name": "List My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] },
+            "description": "The caller's own bookings, most recent first."
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}", "cancel"]
+            },
+            "description": "Owner only. Only a PENDING booking can be cancelled - releases its seat locks now."
+          }
+        },
+        {
+          "name": "Get Booking QR Code (PNG)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/qr?size=320",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}", "qr"],
+              "query": [{ "key": "size", "value": "320", "description": "128-1024, default 320" }]
+            },
+            "description": "Owner only; CONFIRMED bookings only (409 otherwise). Returns image/png, Cache-Control: no-store."
+          }
+        },
+        {
+          "name": "Get Printable Ticket",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/ticket",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}", "ticket"]
+            },
+            "description": "Owner only; CONFIRMED bookings only (409 otherwise). Printable ticket detail."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Webhook",
+      "item": [
+        {
+          "name": "Gateway Webhook (Razorpay)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "text/plain" },
+              { "key": "X-Razorpay-Signature", "value": "generated_hmac_signature_here" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"payment.captured\",\"payload\":{\"payment\":{\"entity\":{\"order_id\":\"order_XXXXXXXXXXXX\",\"id\":\"pay_XXXXXXXXXXXX\",\"status\":\"captured\"}}}}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments/webhook", "host": ["{{baseUrl}}"], "path": ["payments", "webhook"] },
+            "description": "PUBLIC on purpose - not JWT authenticated, HMAC-signature verified instead (see X-Razorpay-Signature). Raw body must be the exact bytes Razorpay signed; this sample is illustrative only and will fail signature verification unless signed with your real webhook secret."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mock Gateway (mock mode only)",
+      "item": [
+        {
+          "name": "Simulate Successful Payment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mock-gateway/pay/{{providerOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["mock-gateway", "pay", "{{providerOrderId}}"]
+            },
+            "description": "MOCKED - public, only active when payment.gateway=mock (the default). Simulates the customer successfully paying for providerOrderId (set automatically by 'Create Booking''s test script, or set {{providerOrderId}} manually from the booking's Payment). Internally drives the same webhook path as the real gateway."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ticket Gate",
+      "item": [
+        {
+          "name": "Validate Ticket at Gate (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{ticketCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/tickets/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tickets", "validate"]
+            },
+            "description": "ROLE_ADMIN only. Scans a QR ticket's bare bookingReference (code). Always 200 for a processed scan; check the 'result' field: VALID / ALREADY_USED / NOT_CONFIRMED / OUTSIDE_WINDOW / NOT_FOUND."
+          }
+        }
+      ]
+    }
+  ]
+}
