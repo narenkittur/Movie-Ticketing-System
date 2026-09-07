@@ -1,0 +1,33 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: movieticket
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"    # local dev only
+    ports: ["3306:3306"]
+    volumes: ["mysql-data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    # No volume, and no AOF/RDB persistence, ON PURPOSE. Lock state is
+    # ephemeral by definition - a lock restored from disk has a TTL that is
+    # already wrong (plan/redis.md section 9-F). Losing it all on restart is
+    # correct, not a bug.
+    #
+    # --notify-keyspace-events Kx (Module 6, plan/websockets.md section 5.1):
+    # K = keyspace events, x = expired. Lets SeatLockExpiryListener hear about a
+    # lock dying by TTL instead of that transition running no code at all - see
+    # that class's javadoc for the (best-effort, not a guarantee) caveat.
+    command: redis-server --notify-keyspace-events Kx
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  mysql-data:

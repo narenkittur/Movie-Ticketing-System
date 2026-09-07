@@ -4,6 +4,7 @@ import com.example.movieticket.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -137,6 +138,51 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("Invalid request on {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request, null);
+    }
+
+    // --- Module 4: Redis seat locking (plan/redis.md section 9) ---
+
+    // Requested seat id doesn't belong to this show - SeatLockService.lock().
+    @ExceptionHandler(SeatNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSeatNotFound(SeatNotFoundException ex, HttpServletRequest request) {
+        log.warn("Seat not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
+    }
+
+    // One or more seats already BOOKED, or held by another user - SeatLockService.lock().
+    @ExceptionHandler(SeatUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleSeatUnavailable(SeatUnavailableException ex, HttpServletRequest request) {
+        log.warn("Seat unavailable on {}: {} {}", request.getRequestURI(), ex.getMessage(), ex.getDetails());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request, ex.getDetails());
+    }
+
+    // Module 5's assertHoldsAll() found the caller no longer holds every seat
+    // they're trying to book - SeatLockService.assertHoldsAll().
+    @ExceptionHandler(SeatLockExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleSeatLockExpired(SeatLockExpiredException ex, HttpServletRequest request) {
+        log.warn("Seat lock expired on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);
+    }
+
+    // Thrown deliberately by SeatLockService/RedisSeatLockView when Redis is
+    // unreachable or a command times out. claude.md's fail-closed rule: never let
+    // a Redis outage be read as "the seat is free".
+    @ExceptionHandler(SeatLockUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleSeatLockUnavailable(SeatLockUnavailableException ex, HttpServletRequest request) {
+        log.error("Seat lock service unavailable on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request, null);
+    }
+
+    // Defense-in-depth catch-all: any DataAccessException (Redis or otherwise)
+    // that escapes uncaught anywhere still fails closed as a 503 instead of
+    // falling through to a raw, unhelpful 500 - consistent with the rule above.
+    // Declared after the more specific handlers so Spring's exception resolver
+    // prefers those first (it always dispatches to the most specific match, but
+    // the ordering here mirrors that intent for readability).
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ErrorResponse> handleDataAccessException(DataAccessException ex, HttpServletRequest request) {
+        log.error("Unhandled data access error on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Service temporarily unavailable", request, null);
     }
 
     // Small helper so every handler above builds the same ErrorResponse shape

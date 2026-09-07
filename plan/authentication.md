@@ -189,7 +189,7 @@ tradeoff of statelessness, addressed in Issue #2 below.
 | Module | Dependency on Module 2 |
 |---|---|
 | 3 — Movie/Show CRUD | Admin endpoints annotated `@PreAuthorize("hasRole('ADMIN')")`, relying on the `role` claim set here. |
-| 4 — Redis seat locking | The seat-lock value written to `seat:{showId}:{seatId}` is the **authenticated principal's user id**, taken from `SecurityContextHolder`, never a client-supplied id in the request body. |
+| 4 — Redis seat locking | The seat-lock value written to `seat_lock:{showId}:{seatId}` is the **authenticated principal's user id**, taken from `SecurityContextHolder`, never a client-supplied id in the request body. (Key prefix corrected from `seat:` to `seat_lock:` to match `claude.md` and `plan/redis.md` §3.) |
 | 5 — Payment/Booking | `Booking.user` is resolved from the authenticated principal, not the request payload — prevents booking on someone else's behalf. |
 | 6 — WebSockets | STOMP `CONNECT` frames aren't covered by the servlet filter chain; needs a `ChannelInterceptor` that reuses `JwtService.isAccessTokenValid`/`extractUsername` to authenticate the handshake. Flagged now so it's not a surprise in Module 6. |
 | 7 — QR / validate | `/validate/{bookingId}` (entrance scan) is likely role-gated the same way as admin routes. |

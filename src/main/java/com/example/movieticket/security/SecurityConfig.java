@@ -113,6 +113,18 @@ public class SecurityConfig {
                         // time as the original Module 2 comment here described.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
+                        // --- Module 4: Redis seat locking (plan/redis.md section 10) ---
+                        // MUST come BEFORE the permitAll GET rule directly below.
+                        // Spring Security evaluates authorizeHttpRequests rules in
+                        // declaration order and stops at the first match - GET
+                        // /shows/{id}/seats/locks/mine matches /shows/** below, and
+                        // since it answers "what does THIS caller hold", a public
+                        // version would leak one user's seat selections to anyone
+                        // who asks. POST/DELETE /shows/{id}/seats/lock need no
+                        // matcher of their own: the rule below is GET-only, so they
+                        // already fall through to .anyRequest().authenticated().
+                        .requestMatchers(HttpMethod.GET, "/shows/*/seats/locks/mine").authenticated()
+
                         // --- Module 3: Movie/Show/Seat catalog (plan/crud.md section 8) ---
                         // Public reads: GET-only, so a future POST/PUT/DELETE added
                         // under these same paths does NOT accidentally inherit
