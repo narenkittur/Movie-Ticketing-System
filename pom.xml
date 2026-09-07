@@ -51,6 +51,12 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- STOMP-over-WebSocket transport (Module 6, plan/websockets.md section 2).
+		     No <version> - managed by the spring-boot-starter-parent BOM. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-websocket</artifactId>
+		</dependency>
 
 		<!-- OpenAPI/Swagger UI generation (Module 3). Version 3.0.3 is springdoc's
 		     Spring Boot 4 / Spring Framework 7 / Jakarta / Jackson 3 compatible line

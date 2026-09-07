@@ -156,6 +156,20 @@ public class SecurityConfig {
                         // rule is harmless dead weight in Razorpay mode, not a live hole.
                         .requestMatchers(HttpMethod.POST, "/mock-gateway/**").permitAll()
 
+                        // --- Module 6: WebSockets (plan/websockets.md section 8.1) ---
+                        // The STOMP handshake is an ordinary HTTP GET with
+                        // Upgrade: websocket, so it goes through this filter chain like
+                        // anything else - and it carries no Authorization header (a
+                        // browser's WebSocket constructor cannot set request headers;
+                        // the JWT rides the STOMP CONNECT frame instead, validated by
+                        // StompAuthChannelInterceptor at the STOMP layer, not here). MUST
+                        // stay ahead of anyRequest().authenticated() below - the third
+                        // instance of this project's matcher-ordering trap (Module 4's
+                        // locks/mine, Module 5's webhook), and the most forgiving of the
+                        // three: declared too late, the handshake just 401s loudly at the
+                        // first connection attempt instead of silently misbehaving.
+                        .requestMatchers("/ws/**").permitAll()
+
                         // Deliberately NOT included above: /auth/logout requires a
                         // valid access token (see JwtAuthenticationFilter's javadoc
                         // and logic/jwt.md "Decisions") - it falls through to

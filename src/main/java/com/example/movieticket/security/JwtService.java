@@ -152,6 +152,19 @@ public class JwtService {
     }
 
     /**
+     * Extracts the "exp" claim as an {@link Instant}. Assumes the token was already
+     * validated. Added for Module 6 (plan/websockets.md Open Decision A):
+     * {@code StompAuthChannelInterceptor} reads this at {@code CONNECT} to schedule
+     * a force-close of the WebSocket session at the instant its authenticating
+     * access token would have expired anyway - a socket that outlives its token is
+     * de facto stateful auth, which matters now that {@code /user/queue/bookings}
+     * puts real booking data on the wire.
+     */
+    public java.time.Instant extractExpiration(String jwt) {
+        return parseClaims(jwt).getExpiration().toInstant();
+    }
+
+    /**
      * Returns whether an access token is structurally valid, correctly signed, and
      * not expired. Deliberately swallows every JwtException/IllegalArgumentException
      * and returns false instead of throwing - JwtAuthenticationFilter relies on this
