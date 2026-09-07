@@ -52,11 +52,23 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- OpenAPI/Swagger UI generation (Module 3). Version 3.0.3 is springdoc's
+		     Spring Boot 4 / Spring Framework 7 / Jakarta / Jackson 3 compatible line
+		     (the 2.x line targets Spring Boot 3). No <version> is inherited from the
+		     parent BOM for this artifact, so it's pinned explicitly here - verified
+		     against Maven Central before adding (see claude.md "Module Status"). -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.0.3</version>
+		</dependency>
+
 		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

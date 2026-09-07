@@ -13,6 +13,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+// Module 3 exception types (movie/show/seat catalog) - see plan/crud.md section 9's
+// exception-to-status table.
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -49,14 +52,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Validation failed", request, details);
     }
 
-    // Thrown when a UNIQUE constraint (username or email) is violated at the DB
-    // level. This is the *authoritative* guard against duplicate registrations -
-    // see Issue #1 in plan/authentication.md for why the service-layer existsBy...
-    // pre-check alone isn't sufficient under concurrent requests.
+    // Thrown when a UNIQUE constraint is violated at the DB level - originally
+    // just the users username/email constraint (Module 2), now also the Module 3
+    // seats UNIQUE(show_id, seat_number) constraint (see Seat's javadoc). This is
+    // the *authoritative* guard in both cases; the service-layer pre-checks
+    // (existsByUsername/existsByEmail in AuthService, existsByShowId in
+    // SeatService) are fast-path rejections for the common case, not the real
+    // guard - see Issue #1 in plan/authentication.md for why a check-then-act
+    // pre-check alone isn't safe under concurrent requests. Message is
+    // deliberately generic (not "username already exists") since this handler
+    // is now shared across more than one uniqueness constraint.
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
         log.warn("Data integrity violation on {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
-        return build(HttpStatus.CONFLICT, "Username or email already in use", request, null);
+        return build(HttpStatus.CONFLICT, "A record with these values already exists", request, null);
     }
 
     // Thrown by AuthenticationManager.authenticate() in AuthService.login() when
@@ -84,6 +93,50 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex, HttpServletRequest request) {
         log.warn("Authentication error on {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNAUTHORIZED, "Authentication failed", request, null);
+    }
+
+    // --- Module 3: Movie/Show/Seat catalog (plan/crud.md section 9) ---
+
+    // Unknown movieId path variable - MovieService.updateMovie()/getMovieOrThrow(),
+    // also surfaced through ShowService when a show's parent movie doesn't exist.
+    @ExceptionHandler(MovieNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMovieNotFound(MovieNotFoundException ex, HttpServletRequest request) {
+        log.warn("Movie not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
+    }
+
+    // Unknown showId path variable - SeatService.generateLayout()/getSeatLayout().
+    @ExceptionHandler(ShowNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleShowNotFound(ShowNotFoundException ex, HttpServletRequest request) {
+        log.warn("Show not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
+    }
+
+    // A new show's [startTime, startTime + duration) window overlaps another show
+    // already scheduled on the same screen - ShowService.assertNoScreenConflict().
+    @ExceptionHandler(ScreenTimeConflictException.class)
+    public ResponseEntity<ErrorResponse> handleScreenTimeConflict(ScreenTimeConflictException ex, HttpServletRequest request) {
+        log.warn("Screen time conflict on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);
+    }
+
+    // Seat layout generation called twice for the same show - SeatService.generateLayout().
+    @ExceptionHandler(SeatsAlreadyGeneratedException.class)
+    public ResponseEntity<ErrorResponse> handleSeatsAlreadyGenerated(SeatsAlreadyGeneratedException ex, HttpServletRequest request) {
+        log.warn("Duplicate seat-layout generation attempt on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);
+    }
+
+    // Cross-field validation that Bean Validation can't express on its own -
+    // currently only SeatService's "rowLabels size must match rows" check
+    // (plan/crud.md: SeatLayoutRequest's javadoc explains why this isn't a
+    // @Constraint annotation instead). Deliberately narrow: this does NOT become
+    // a catch-all for every IllegalArgumentException in the app, only the ones
+    // thrown deliberately as request-validation failures from the service layer.
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        log.warn("Invalid request on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request, null);
     }
 
     // Small helper so every handler above builds the same ErrorResponse shape

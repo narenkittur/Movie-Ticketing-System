@@ -2,9 +2,11 @@ package com.example.movieticket.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,6 +22,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * top of what's configured here via @PreAuthorize + the `role` JWT claim.
  */
 @Configuration // Marks this as a source of @Bean definitions, processed at application startup.
+// Module 3 fix: without this annotation, every @PreAuthorize("hasRole('ADMIN')")
+// on MovieController/ShowController/SeatController (and anywhere else in the app)
+// is silently NEVER ENFORCED - Spring Security only evaluates method-security
+// annotations when a class carrying this annotation is on the context. The
+// Module 2 plan (plan/authentication.md section 7) already assumed @PreAuthorize
+// "works downstream", but the annotation enabling it was never actually added
+// until now (plan/crud.md section 8-b flagged this as the module's highest-risk
+// item). @EnableMethodSecurity is the Spring Security 6+/7 replacement for the
+// older @EnableGlobalMethodSecurity(prePostEnabled = true).
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
@@ -95,12 +107,25 @@ public class SecurityConfig {
                         // credentials in the first place, so they can't themselves
                         // require credentials.
                         .requestMatchers("/auth/register", "/auth/login", "/auth/refresh").permitAll()
-                        // Swagger/OpenAPI UI + docs - added defensively now per
-                        // claude.md's documentation constraint, even though the
-                        // springdoc dependency itself isn't in pom.xml yet (see
-                        // claude.md "Known Gaps"). Harmless permitAll until that
-                        // dependency lands and starts serving these paths.
+                        // Swagger/OpenAPI UI + docs - the springdoc dependency
+                        // landed in Module 3 (pom.xml), so these paths are now
+                        // actually served, not just defensively permitted ahead of
+                        // time as the original Module 2 comment here described.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
+                        // --- Module 3: Movie/Show/Seat catalog (plan/crud.md section 8) ---
+                        // Public reads: GET-only, so a future POST/PUT/DELETE added
+                        // under these same paths does NOT accidentally inherit
+                        // permitAll just by matching the URL prefix.
+                        .requestMatchers(HttpMethod.GET, "/movies", "/movies/**", "/shows/**").permitAll()
+                        // Admin writes: coarse URL-level gate, layer one of two -
+                        // layer two is @PreAuthorize("hasRole('ADMIN')") on each
+                        // controller method itself (MovieController, ShowController,
+                        // SeatController). Placed BEFORE anyRequest().authenticated()
+                        // below, since Spring Security evaluates authorizeHttpRequests
+                        // rules in declaration order and stops at the first match.
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
                         // Deliberately NOT included above: /auth/logout requires a
                         // valid access token (see JwtAuthenticationFilter's javadoc
                         // and logic/jwt.md "Decisions") - it falls through to
