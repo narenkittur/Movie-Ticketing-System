@@ -29,6 +29,11 @@
 	<properties>
 		<java.version>21</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- QR code generation (Module 7, plan/qrtickets.md section 4.2). Not in the
+		     Spring Boot parent BOM, same situation as springdoc in Module 3 - pinned
+		     explicitly, verified against Maven Central before adding. core and
+		     javase MUST stay on the same version - ZXing does not support mixing. -->
+		<zxing.version>3.5.3</zxing.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -75,6 +80,20 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- QR encoding (Module 7, plan/qrtickets.md section 4.2). javase pulls in
+		     java.awt/ImageIO (MatrixToImageWriter is AWT-backed) - safe here because
+		     Spring Boot sets java.awt.headless=true by default. QrCodeGenerator is the
+		     only class in the project that imports com.google.zxing. -->
+		<dependency>
+			<groupId>com.google.zxing</groupId>
+			<artifactId>core</artifactId>
+			<version>${zxing.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.zxing</groupId>
+			<artifactId>javase</artifactId>
+			<version>${zxing.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

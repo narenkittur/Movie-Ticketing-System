@@ -2,6 +2,7 @@ package com.example.movieticket.exception;
 
 import com.example.movieticket.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -50,6 +51,20 @@ public class GlobalExceptionHandler {
 
         log.warn("Validation failed for {}: {}", request.getRequestURI(), details);
 
+        return build(HttpStatus.BAD_REQUEST, "Validation failed", request, details);
+    }
+
+    // Module 7 (plan/qrtickets.md section 4.3): @Min/@Max on a bare @RequestParam
+    // (BookingController#qr's ?size=) throws THIS, not MethodArgumentNotValidException
+    // above - that one only fires for @Valid @RequestBody DTOs. Needs @Validated on
+    // the controller class for Spring to evaluate constraints on a loose method
+    // parameter at all.
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
+        List<String> details = ex.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .toList();
+        log.warn("Constraint violation on {}: {}", request.getRequestURI(), details);
         return build(HttpStatus.BAD_REQUEST, "Validation failed", request, details);
     }
 
