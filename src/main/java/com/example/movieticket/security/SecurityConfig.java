@@ -138,6 +138,24 @@ public class SecurityConfig {
                         // rules in declaration order and stops at the first match.
                         .requestMatchers("/admin/**").hasRole("ADMIN")
 
+                        // --- Module 5: Payment gateway (plan/payment.md section 8.2) ---
+                        // The webhook carries NO JWT - Razorpay's servers authenticate
+                        // via an HMAC signature over the raw body instead (verified in
+                        // PaymentWebhookController/PaymentGateway, not here). This MUST
+                        // stay ahead of anyRequest().authenticated() below: a matcher
+                        // declared too late makes every webhook silently 401 and no
+                        // payment ever confirms - the mirror-image trap of Module 4's
+                        // locks/mine matcher (there, too-late made a private endpoint
+                        // public; here, too-late makes a public endpoint permanently
+                        // unreachable). See PaymentWebhookController's own javadoc.
+                        .requestMatchers(HttpMethod.POST, "/payments/webhook").permitAll()
+                        // The mock-gateway stand-in for "the customer pays" - public for
+                        // the same reason (plan/payment.md section 2, endpoint 7). Only
+                        // wired into the app at all when payment.gateway=mock
+                        // (MockGatewayController's own @ConditionalOnProperty), so this
+                        // rule is harmless dead weight in Razorpay mode, not a live hole.
+                        .requestMatchers(HttpMethod.POST, "/mock-gateway/**").permitAll()
+
                         // Deliberately NOT included above: /auth/logout requires a
                         // valid access token (see JwtAuthenticationFilter's javadoc
                         // and logic/jwt.md "Decisions") - it falls through to

@@ -185,6 +185,44 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, "Service temporarily unavailable", request, null);
     }
 
+    // --- Module 5: Payment + booking (plan/payment.md section 9) ---
+
+    // Unknown booking id, or one belonging to someone other than the caller -
+    // BookingService.getBooking()/cancelBooking()/confirmPaid() etc. Deliberately
+    // 404, not 403 (plan/payment.md section 8.5), so booking ids aren't enumerable.
+    @ExceptionHandler(BookingNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleBookingNotFound(BookingNotFoundException ex, HttpServletRequest request) {
+        log.warn("Booking not found on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
+    }
+
+    // An operation illegal for the booking's current status - e.g. cancelling an
+    // already-CONFIRMED booking, or confirming one with no payment order yet -
+    // BookingService.cancelBooking()/verifyCallbackAndResolveOrderId().
+    @ExceptionHandler(BookingStateException.class)
+    public ResponseEntity<ErrorResponse> handleBookingState(BookingStateException ex, HttpServletRequest request) {
+        log.warn("Illegal booking state transition on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request, null);
+    }
+
+    // Gateway signature mismatch, on either the browser-callback or webhook path -
+    // PaymentGateway.verifyCallbackSignature()/verifyAndParseWebhook() (section 8.3).
+    @ExceptionHandler(PaymentVerificationException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentVerification(PaymentVerificationException ex, HttpServletRequest request) {
+        log.warn("Payment signature verification failed on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request, null);
+    }
+
+    // The payment gateway itself is unreachable, times out, or returns a non-2xx -
+    // RazorpayPaymentGateway.createIntent()/refund(). 502, not 503: 503 in this
+    // codebase already means "WE are degraded, fail closed" (Redis down); a third
+    // party being down is a distinct condition (plan/payment.md section 9).
+    @ExceptionHandler(PaymentGatewayException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentGateway(PaymentGatewayException ex, HttpServletRequest request) {
+        log.error("Payment gateway error on {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_GATEWAY, ex.getMessage(), request, null);
+    }
+
     // Small helper so every handler above builds the same ErrorResponse shape
     // with one line instead of repeating the builder chain five times.
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request, List<String> details) {
