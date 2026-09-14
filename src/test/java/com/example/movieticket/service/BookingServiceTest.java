@@ -297,4 +297,54 @@ class BookingServiceTest {
         assertThrows(BookingStateException.class, () -> bookingService.cancelBooking(4L, "alice"));
         verify(seatLockService, never()).releaseAfterCommit(any(), any(), any(), any());
     }
+
+    // --- refund (Module 9) ---
+
+    @Test
+    void refund_refundPendingBooking_callsGateway_becomesRefunded() {
+        Booking booking = Booking.builder().id(6L).show(SHOW).user(ALICE).status(BookingStatus.REFUND_PENDING).build();
+        Payment payment = Payment.builder().booking(booking).status(PaymentStatus.REFUND_PENDING)
+                .providerPaymentId("pay-1").amount(new BigDecimal("400.00")).build();
+        booking.setPayment(payment);
+        when(paymentRepository.findWithLockByBookingId(6L)).thenReturn(Optional.of(payment));
+
+        var response = bookingService.refund(6L, "admin1");
+
+        assertEquals("REFUNDED", response.getStatus());
+        assertEquals(BookingStatus.REFUNDED, booking.getStatus());
+        assertEquals(PaymentStatus.REFUNDED, payment.getStatus());
+        verify(paymentGateway).refund("pay-1", new BigDecimal("400.00"));
+        verify(eventPublisher).publishEvent(argThat((BookingStatusChangedEvent evt) -> evt.status() == BookingStatus.REFUNDED));
+    }
+
+    @Test
+    void refund_paymentNotAwaitingRefund_throwsConflict_gatewayNeverCalled() {
+        Booking booking = Booking.builder().id(7L).show(SHOW).user(ALICE).status(BookingStatus.CONFIRMED).build();
+        Payment payment = Payment.builder().booking(booking).status(PaymentStatus.CAPTURED)
+                .providerPaymentId("pay-2").amount(BigDecimal.TEN).build();
+        booking.setPayment(payment);
+        when(paymentRepository.findWithLockByBookingId(7L)).thenReturn(Optional.of(payment));
+
+        assertThrows(BookingStateException.class, () -> bookingService.refund(7L, "admin1"));
+
+        verifyNoInteractions(paymentGateway);
+        assertEquals(PaymentStatus.CAPTURED, payment.getStatus()); // untouched by the guard
+    }
+
+    @Test
+    void refund_gatewayFails_revertsToRefundPending_forRetry() {
+        Booking booking = Booking.builder().id(8L).show(SHOW).user(ALICE).status(BookingStatus.REFUND_PENDING).build();
+        Payment payment = Payment.builder().booking(booking).status(PaymentStatus.REFUND_PENDING)
+                .providerPaymentId("pay-3").amount(new BigDecimal("150.00")).build();
+        booking.setPayment(payment);
+        when(paymentRepository.findWithLockByBookingId(8L)).thenReturn(Optional.of(payment));
+        doThrow(new PaymentGatewayException("gateway down")).when(paymentGateway).refund("pay-3", new BigDecimal("150.00"));
+
+        assertThrows(PaymentGatewayException.class, () -> bookingService.refund(8L, "admin1"));
+
+        // Reverted, not stuck at REFUNDING forever - a retry must see the state it expects.
+        assertEquals(PaymentStatus.REFUND_PENDING, payment.getStatus());
+        assertEquals(BookingStatus.REFUND_PENDING, booking.getStatus()); // step 3 never ran
+        verify(eventPublisher, never()).publishEvent(any(BookingStatusChangedEvent.class));
+    }
 }

@@ -21,4 +21,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // writes, all from one lock on one row.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Payment> findWithLockByProviderOrderId(String providerOrderId);
+
+    // Module 9 (BookingService.refund): the same PESSIMISTIC_WRITE pattern as
+    // findWithLockByProviderOrderId above, keyed by booking id instead - the
+    // admin-facing identifier for a refund is the booking, not the gateway's own
+    // order id. Spring Data resolves this via the booking.id path (Payment's
+    // @OneToOne to Booking), no @Query needed.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Payment> findWithLockByBookingId(Long bookingId);
 }

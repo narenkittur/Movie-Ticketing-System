@@ -7,6 +7,7 @@ import com.example.movieticket.dto.ConfirmPaymentRequest;
 import com.example.movieticket.dto.CreateBookingRequest;
 import com.example.movieticket.exception.BookingNotFoundException;
 import com.example.movieticket.exception.BookingStateException;
+import com.example.movieticket.exception.PaymentGatewayException;
 import com.example.movieticket.exception.SeatNotFoundException;
 import com.example.movieticket.exception.SeatUnavailableException;
 import com.example.movieticket.exception.ShowNotFoundException;
@@ -399,6 +400,83 @@ public class BookingService {
     }
 
     /**
+     * POST /admin/bookings/{bookingId}/refund (Module 9, resolving plan/payment.md
+     * Open Decision A) - drives a REFUND_PENDING booking to REFUNDED via the
+     * payment gateway. Three steps, deliberately, for the same reason as
+     * {@link #createBooking}: step 1 opens a short transaction to lock the
+     * payment row and flip it to the in-flight {@code REFUNDING} marker (see
+     * that enum constant's own javadoc); step 2 calls the gateway over the
+     * network with NO transaction open - never hold a pooled JDBC connection and
+     * a {@code FOR UPDATE} row lock for the duration of a call to somebody
+     * else's server, the exact rule this project already established for step B
+     * of {@code createBooking}; step 3 opens a second short transaction to
+     * persist REFUNDED. If the gateway call throws, a compensating step reverts
+     * the payment back to REFUND_PENDING so a future retry sees the state it
+     * expects, rather than leaving it stuck at REFUNDING forever with no way
+     * back - the same "never leave partial-failure state unrecoverable" instinct
+     * as claude.md's fail-closed rules elsewhere, applied here to a write path
+     * instead of a read path.
+     */
+    public BookingResponse refund(Long bookingId, String adminUsername) {
+        RefundContext context = self.beginRefund(bookingId);
+        try {
+            paymentGateway.refund(context.providerPaymentId(), context.amount());
+        } catch (PaymentGatewayException ex) {
+            self.revertRefundToPending(bookingId);
+            throw ex;
+        }
+        return self.completeRefund(bookingId, adminUsername);
+    }
+
+    /**
+     * Step 1 of {@link #refund}. Package-visible for the same testing reason as
+     * {@link #createPendingBooking}. The guard checks {@code payment.status}, not
+     * {@code booking.status} - REFUND_PENDING on the booking is the stable
+     * "needs a refund" signal for the whole lifetime of this operation, while
+     * REFUNDING is a payment-level detail two concurrent callers race on, the
+     * same "parallel but distinct" split {@link Payment}'s own javadoc already
+     * describes between the two enums.
+     */
+    @Transactional
+    RefundContext beginRefund(Long bookingId) {
+        Payment payment = paymentRepository.findWithLockByBookingId(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException("No booking found with id " + bookingId));
+        if (payment.getStatus() != PaymentStatus.REFUND_PENDING) {
+            throw new BookingStateException("Booking " + bookingId + " is not awaiting a refund (payment status " + payment.getStatus() + ")");
+        }
+        payment.setStatus(PaymentStatus.REFUNDING);
+        paymentRepository.save(payment);
+        // providerPaymentId is guaranteed non-null here: both REFUND_PENDING
+        // branches in confirmPaid set it in the same write as the status itself.
+        return new RefundContext(payment.getProviderPaymentId(), payment.getAmount());
+    }
+
+    /** Compensating step if {@link #refund}'s gateway call fails - undoes step 1's REFUNDING marker so a retry is possible. Package-visible for the same testing reason as {@link #createPendingBooking}. */
+    @Transactional
+    void revertRefundToPending(Long bookingId) {
+        Payment payment = paymentRepository.findWithLockByBookingId(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException("No booking found with id " + bookingId));
+        payment.setStatus(PaymentStatus.REFUND_PENDING);
+        paymentRepository.save(payment);
+        log.error("Refund gateway call failed for booking {} - reverted to REFUND_PENDING for retry", bookingId);
+    }
+
+    /** Step 3 of {@link #refund}. Package-visible for the same testing reason as {@link #createPendingBooking}. */
+    @Transactional
+    BookingResponse completeRefund(Long bookingId, String adminUsername) {
+        Payment payment = paymentRepository.findWithLockByBookingId(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException("No booking found with id " + bookingId));
+        Booking booking = payment.getBooking();
+        booking.setStatus(BookingStatus.REFUNDED);
+        payment.setStatus(PaymentStatus.REFUNDED);
+        bookingRepository.save(booking);
+        paymentRepository.save(payment);
+        log.info("Booking {} refunded by admin '{}'", bookingId, adminUsername);
+        publishBookingStatusChanged(booking);
+        return toResponse(booking);
+    }
+
+    /**
      * Open Decision B (plan/payment.md section 13-B): looks for a non-expired
      * PENDING booking this user already holds, for this exact show + seat set.
      * Deliberately an exact-set match, not "any overlap" - a partially-different
@@ -487,5 +565,9 @@ public class BookingService {
 
     /** Internal result of {@link #createPendingBooking} - never leaves this class. */
     record BookingCreationResult(Booking booking, boolean created) {
+    }
+
+    /** Internal result of {@link #beginRefund} - never leaves this class. */
+    private record RefundContext(String providerPaymentId, BigDecimal amount) {
     }
 }

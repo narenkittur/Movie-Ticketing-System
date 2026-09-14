@@ -4,7 +4,11 @@ services:
     environment:
       MYSQL_DATABASE: movieticket
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"    # local dev only
-    ports: ["3306:3306"]
+    # Host port 3307, not 3306 - this dev machine already has a native
+    # mysqld bound to 3306 (unrelated to this project). Container-internal
+    # port stays 3306; only the host mapping changes, so DB_URL below is
+    # the only other thing that needs to know.
+    ports: ["3307:3306"]
     volumes: ["mysql-data:/var/lib/mysql"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
