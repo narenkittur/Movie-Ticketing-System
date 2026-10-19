@@ -73,29 +73,6 @@ with automatic expiry, so no cleanup jobs are needed.
 | Max seats per hold | **10** |
 | Seat hold time | **5 minutes** |
 
-## 🚀 Run It Locally
-
-**You'll need:** JDK 21 and Docker
-
-```bash
-git clone https://github.com/narenkittur/Movie-Ticketing-System.git
-cd Movie-Ticketing-System
-
-docker compose up -d       # starts MySQL + Redis
-./mvnw spring-boot:run     # starts the app on http://localhost:8080
-```
-
-Then open **http://localhost:8080/swagger-ui.html** to explore and try the API.
-
-No setup or API keys needed: payments run on the mock gateway by default, so no
-real money is involved. A ready-made Postman collection is included:
-[`Movieticket.postman_collection.json`](Movieticket.postman_collection.json).
-
-Run the tests:
-
-```bash
-./mvnw test
-```
 
 ## 🔌 API at a Glance
 
